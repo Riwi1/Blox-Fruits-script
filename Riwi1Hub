@@ -1,210 +1,218 @@
--- Blox Fruits Hub by Cyber-Tiel-Coder
--- Autofarm + Professional Menu
--- Compatível com a maioria dos executores (Roblox API padrão)
+-- language: Lua, file: blox_fruits_hub.lua
+-- Blox Fruits Hub Corrigido
+-- UI arrumada, Autofarm com movimento e ataque, Teleporte seguro.
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local Http = game:GetService("HttpService")
-
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 -- ============================================================
---  Utilidades de UI (sem dependências externas)
--- ============================================================
-local function round(r) return math.abs(r) end
-
-local function createGui(name, title)
-    local gui = Instance.new("ScreenGui")
-    gui.Name = name
-    gui.ResetOnSpawn = false
-    gui.Archivable = false
-    gui.IgnoreGuiOrder = true
-    gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UINumber.new(12)
-    corner.Parent = gui
-
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, 0, 0, 45)
-    titleLbl.BackgroundTransparency = 0.1
-    titleLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    titleLbl.Text = title
-    titleLbl.TextColor = Color3.fromRGB(255, 255, 255)
-    titleLbl.Font = Enum.Font.GothamBold
-    titleLbl.TextSize = 18
-    titleLbl.BorderSizePixel = 0
-    titleLbl.Parent = gui
-
-    local tc = Instance.new("UICorner")
-    tc.CornerRadius = UINumber.new(12)
-    tc.Parent = titleLbl
-
-    return gui, titleLbl
-end
-
-local function makeButton(parent, size, position, text, color)
-    local btn = Instance.new("TextButton")
-    btn.Size = size
-    btn.Position = position
-    btn.BackgroundColor3 = color or Color3.fromRGB(60, 60, 75)
-    btn.TextColor = Color3.fromRGB(255, 255, 255)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 15
-    btn.BorderSizePixel = 0
-    btn.Parent = parent
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UINumber.new(8)
-    c.Parent = btn
-    return btn
-end
-
--- ============================================================
---  Hub Principal
--- ============================================================
-local hub, hubTitle = createGui("BloxHub", "🍎 Blox Fruits Hub")
-
--- Painel de conteúdo rolável
-local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -20, 1, -65)
-scroll.Position = UDim2.new(0, 10, 0, 50)
-scroll.BackgroundTransparency = 0.85
-scroll.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-scroll.CanvasSize = UDim2.new(0, 0, 2, 0)
-scroll.ScrollingEnabled = true
-scroll.UIScrollSpeed = 1
-scroll.BorderSizePixel = 0
-scroll.Parent = hub
-
-local layout = Instance.new("UIListLayout")
-layout.FillDirection = Enum.Direction.Vertical
-layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UINumber.new(8)
-layout.Parent = scroll
-
--- Controles de autofarm
-local farmStatus = Instance.new("TextLabel")
-farmStatus.Text = "Autofarm: OFF"
-farmStatus.Size = UDim2.new(1, 0, 0, 24)
-farmStatus.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-farmStatus.TextColor = Color3.fromRGB(255, 215, 0)
-farmStatus.Font = Enum.Font.GothamBold
-farmStatus.TextSize = 16
-farmStatus.BorderSizePixel = 0
-farmStatus.Parent = scroll
-local fc = Instance.new("UICorner")
-fc.CornerRadius = UINumber.new(8)
-fc.Parent = farmStatus
-
-local function toggleFarm()
-    if not farmRunning then
-        farmRunning = true
-        farmStatus.Text = "Autofarm: ON"
-        farmStatus.TextColor = Color3.fromRGB(0, 255, 120)
-    else
-        farmRunning = false
-        farmStatus.Text = "Autofarm: OFF"
-        farmStatus.TextColor = Color3.fromRGB(255, 215, 0)
-    end
-end
-
--- Botões de função
-makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "⚔️ Autofarm", Color3.fromRGB(70, 70, 90))
-    .MouseButtonDownClick:Connect(toggleFarm)
-
-makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "🌀 Dev Farm (Boss)", Color3.fromRGB(70, 70, 90))
-    .MouseButtonDownClick:Connect(function()
-        if not farmRunning then toggleFarm() end
-        devFarm = true
-    end)
-
-makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "🗺️ Teleport: Second Island", Color3.fromRGB(70, 70, 90))
-    .MouseButtonDownClick:Connect(function() teleportTo("second") end)
-
-makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "⚡ Max Stats (if available)", Color3.fromRGB(70, 70, 90))
-    .MouseButtonDownClick:Connect(function() useStatButton() end)
-
--- ============================================================
---  Lógica de Autofarm
+--  Variáveis de Estado
 -- ============================================================
 local farmRunning = false
 local devFarm = false
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-local function getCharacter()
+-- ============================================================
+--  UI SYSTEM (Corrigido para executores)
+-- ============================================================
+local function createUI()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "BloxHub"
+    gui.ResetOnSpawn = false
+    -- Fallback para CoreGui se o executor suportar
+    if gethui then gui.Parent = gethui() else gui.Parent = playerGui end
+
+    -- Botão Flutuante pra abrir/fechar
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 45, 0, 45)
+    toggleBtn.Position = UDim2.new(0, 20, 0, 100)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 240)
+    toggleBtn.Text = "≡"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.TextSize = 24
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.Parent = gui
+    
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(1, 0)
+    btnCorner.Parent = toggleBtn
+
+    -- Menu Principal
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0, 260, 0, 400)
+    main.Position = UDim2.new(0.5, -130, 0.5, -200)
+    main.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    main.BorderSizePixel = 0
+    main.Active = true
+    main.Parent = gui
+    main.Visible = false -- Começa fechado
+    
+    local mc = Instance.new("UICorner")
+    mc.CornerRadius = UDim.new(0, 10)
+    mc.Parent = main
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 35)
+    title.BackgroundColor3 = Color3.fromRGB(40, 120, 240)
+    title.Text = " Blox Fruits Hub"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 16
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = main
+    
+    local tc = Instance.new("UICorner")
+    tc.CornerRadius = UDim.new(0, 10)
+    tc.Parent = title
+
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(1, -10, 1, -45)
+    scroll.Position = UDim2.new(0, 5, 0, 40)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 2
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.Parent = main
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 8)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = scroll
+
+    -- Lógica de Abrir/Fechar
+    toggleBtn.MouseButton1Click:Connect(function()
+        main.Visible = not main.Visible
+        toggleBtn.Text = main.Visible and "X" or "≡"
+        toggleBtn.BackgroundColor3 = main.Visible and Color3.fromRGB(255, 60, 60) or Color3.fromRGB(40, 120, 240)
+    end)
+
+    -- Funções Auxiliares da UI
+    local function makeBtn(text, color)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 40)
+        btn.BackgroundColor3 = color or Color3.fromRGB(50, 50, 58)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 14
+        btn.Text = text
+        btn.Parent = scroll
+        
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 6)
+        c.Parent = btn
+        return btn
+    end
+
+    return makeBtn, title
+end
+
+local makeBtn, titleBar = createUI()
+
+-- ============================================================
+--  LÓGICA DO JOGO
+-- ============================================================
+local function getChar()
     return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 end
 
-local function findNearestEnemy(range)
-    range = range or 100
-    local char = getCharacter()
-    local root = char:FindFirstChild("HumanoidRootPoint") or char:FindFirstChild("HumanoidRoot")
-    if not root then return nil end
+local function getRoot()
+    local char = getChar()
+    return char:FindFirstChild("HumanoidRootPart")
+end
 
-    local best, bestDist = nil, range
-    for _, target in ipairs(workspace:GetChildren()) do
-        if target ~= char and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
-            local tRoot = target:FindFirstChild("HumanoidRootPoint") or target:FindFirstChild("HumanoidRoot")
-            if tRoot then
-                local dist = (tRoot.Position - root.Position).Magnitude
-                if dist < bestDist then
-                    best, bestDist = target, dist
+-- Acha o inimigo mais próximo (funciona para mobs no Blox Fruits)
+local function getNearestEnemy(range)
+    local root = getRoot()
+    if not root then return nil end
+    
+    local nearest = nil
+    local dist = range or 150
+    
+    for _, v in pairs(workspace:GetChildren()) do
+        if v ~= LocalPlayer.Character and v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+            if v.Humanoid.Health > 0 then
+                local mag = (v.HumanoidRootPart.Position - root.Position).Magnitude
+                if mag < dist then
+                    nearest = v
+                    dist = mag
                 end
             end
         end
     end
-    return best
+    return nearest
 end
 
-local function attackTarget(target)
-    local char = getCharacter()
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return end
-    -- Simula ataque automático contra o alvo mais próximo
-    pcall(function()
-        -- Tenta usar a skill de combate padrão do jogo
-        local cmd = ReplicatedStorage:FindFirstChild("DefaultRemotes")
-        if cmd then
-            pcall(function() cmd:Fire("attack", target) end)
-        end
-    end)
-end
-
-local function teleportTo(location)
-    -- Teleport básico para ilhas usando CFrame do HumanoidRootPoint
-    local char = getCharacter()
-    local root = char:FindFirstChild("HumanoidRootPoint") or char:FindFirstChild("HumanoidRoot")
-    if not root then return end
-
-    local destinations = {
-        second = Vector3.new(-1428, 70, -35),
-    }
-    local pos = destinations[location]
-    if pos then
-        pcall(function() root.CFrame = CFrame.new(pos) end)
+-- Tenta equipar a arma e atacar
+local function attack()
+    local char = getChar()
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        tool:Activate()
+    else
+        -- Se não tiver arma equipada, tenta dar um soco (combate corpo a corpo)
+        VirtualUser:Button1Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(0.1)
+        VirtualUser:Button1Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
     end
 end
 
-local function useStatButton()
-    -- Função placeholder: ajuste conforme a API do seu executor/jogo
-    print("[Hub] UseStatButton pressionado")
-end
+-- Botão: Autofarm
+local farmBtn = makeBtn("⚔️ Autofarm: OFF", Color3.fromRGB(60, 60, 75))
+farmBtn.MouseButton1Click:Connect(function()
+    farmRunning = not farmRunning
+    farmBtn.Text = "⚔️ Autofarm: " .. (farmRunning and "ON" or "OFF")
+    farmBtn.BackgroundColor3 = farmRunning and Color3.fromRGB(0, 150, 80) or Color3.fromRGB(60, 60, 75)
+end)
 
--- Loop de autofarm
-RunService.HeartBeat:Connect(function()
-    if not farmRunning then return end
-    local char = getCharacter()
-    local humanoid = char:FindFirstChild("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return end
+-- Botão: Boss Farm
+local bossBtn = makeBtn("🌀 Dev Farm (Boss)", Color3.fromRGB(60, 60, 75))
+bossBtn.MouseButton1Click:Connect(function()
+    devFarm = not devFarm
+    farmRunning = true
+    farmBtn.Text = "⚔️ Autofarm: ON"
+    farmBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+    bossBtn.BackgroundColor3 = devFarm and Color3.fromRGB(180, 50, 50) or Color3.fromRGB(60, 60, 75)
+end)
 
-    local enemy = findNearestEnemy(devFarm and 500 or 120)
-    if enemy then
-        attackTarget(enemy)
+-- Botão: Teleporte (Ilha 2)
+makeBtn("🗺️ TP: Second Island", Color3.fromRGB(60, 60, 75)).MouseButton1Click:Connect(function()
+    local root = getRoot()
+    if root then
+        root.CFrame = CFrame.new(-1428, 70, -35)
     end
 end)
 
-print("[Hub] Blox Fruits Hub carregado. Use o menu para ativar o Autofarm.")
+-- ============================================================
+--  LOOP PRINCIPAL (Farm)
+-- ============================================================
+RunService.Heartbeat:Connect(function()
+    if not farmRunning then return end
+    
+    local char = getChar()
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    
+    local enemy = getNearestEnemy(devFarm and 500 or 150)
+    
+    if enemy then
+        local root = getRoot()
+        local enemyRoot = enemy:FindFirstChild("HumanoidRootPart")
+        
+        if root and enemyRoot then
+            local dist = (enemyRoot.Position - root.Position).Magnitude
+            
+            -- Se estiver longe, move até o inimigo. Se tiver perto, ataca.
+            if dist > 15 then
+                humanoid:MoveTo(enemyRoot.Position)
+            else
+                humanoid:MoveTo(root.Position) -- Para de andar
+                attack()
+            end
+        end
+    end
+end)
+
+print("[Blox Fruits Hub] Carregado com sucesso. Botão '≡' no canto esquerdo.")
