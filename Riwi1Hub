@@ -1,0 +1,210 @@
+-- Blox Fruits Hub by Cyber-Tiel-Coder
+-- Autofarm + Professional Menu
+-- Compatível com a maioria dos executores (Roblox API padrão)
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Http = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ============================================================
+--  Utilidades de UI (sem dependências externas)
+-- ============================================================
+local function round(r) return math.abs(r) end
+
+local function createGui(name, title)
+    local gui = Instance.new("ScreenGui")
+    gui.Name = name
+    gui.ResetOnSpawn = false
+    gui.Archivable = false
+    gui.IgnoreGuiOrder = true
+    gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UINumber.new(12)
+    corner.Parent = gui
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, 0, 0, 45)
+    titleLbl.BackgroundTransparency = 0.1
+    titleLbl.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    titleLbl.Text = title
+    titleLbl.TextColor = Color3.fromRGB(255, 255, 255)
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 18
+    titleLbl.BorderSizePixel = 0
+    titleLbl.Parent = gui
+
+    local tc = Instance.new("UICorner")
+    tc.CornerRadius = UINumber.new(12)
+    tc.Parent = titleLbl
+
+    return gui, titleLbl
+end
+
+local function makeButton(parent, size, position, text, color)
+    local btn = Instance.new("TextButton")
+    btn.Size = size
+    btn.Position = position
+    btn.BackgroundColor3 = color or Color3.fromRGB(60, 60, 75)
+    btn.TextColor = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 15
+    btn.BorderSizePixel = 0
+    btn.Parent = parent
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UINumber.new(8)
+    c.Parent = btn
+    return btn
+end
+
+-- ============================================================
+--  Hub Principal
+-- ============================================================
+local hub, hubTitle = createGui("BloxHub", "🍎 Blox Fruits Hub")
+
+-- Painel de conteúdo rolável
+local scroll = Instance.new("ScrollingFrame")
+scroll.Size = UDim2.new(1, -20, 1, -65)
+scroll.Position = UDim2.new(0, 10, 0, 50)
+scroll.BackgroundTransparency = 0.85
+scroll.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+scroll.CanvasSize = UDim2.new(0, 0, 2, 0)
+scroll.ScrollingEnabled = true
+scroll.UIScrollSpeed = 1
+scroll.BorderSizePixel = 0
+scroll.Parent = hub
+
+local layout = Instance.new("UIListLayout")
+layout.FillDirection = Enum.Direction.Vertical
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UINumber.new(8)
+layout.Parent = scroll
+
+-- Controles de autofarm
+local farmStatus = Instance.new("TextLabel")
+farmStatus.Text = "Autofarm: OFF"
+farmStatus.Size = UDim2.new(1, 0, 0, 24)
+farmStatus.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+farmStatus.TextColor = Color3.fromRGB(255, 215, 0)
+farmStatus.Font = Enum.Font.GothamBold
+farmStatus.TextSize = 16
+farmStatus.BorderSizePixel = 0
+farmStatus.Parent = scroll
+local fc = Instance.new("UICorner")
+fc.CornerRadius = UINumber.new(8)
+fc.Parent = farmStatus
+
+local function toggleFarm()
+    if not farmRunning then
+        farmRunning = true
+        farmStatus.Text = "Autofarm: ON"
+        farmStatus.TextColor = Color3.fromRGB(0, 255, 120)
+    else
+        farmRunning = false
+        farmStatus.Text = "Autofarm: OFF"
+        farmStatus.TextColor = Color3.fromRGB(255, 215, 0)
+    end
+end
+
+-- Botões de função
+makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "⚔️ Autofarm", Color3.fromRGB(70, 70, 90))
+    .MouseButtonDownClick:Connect(toggleFarm)
+
+makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "🌀 Dev Farm (Boss)", Color3.fromRGB(70, 70, 90))
+    .MouseButtonDownClick:Connect(function()
+        if not farmRunning then toggleFarm() end
+        devFarm = true
+    end)
+
+makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "🗺️ Teleport: Second Island", Color3.fromRGB(70, 70, 90))
+    .MouseButtonDownClick:Connect(function() teleportTo("second") end)
+
+makeButton(scroll, UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), "⚡ Max Stats (if available)", Color3.fromRGB(70, 70, 90))
+    .MouseButtonDownClick:Connect(function() useStatButton() end)
+
+-- ============================================================
+--  Lógica de Autofarm
+-- ============================================================
+local farmRunning = false
+local devFarm = false
+
+local function getCharacter()
+    return LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+end
+
+local function findNearestEnemy(range)
+    range = range or 100
+    local char = getCharacter()
+    local root = char:FindFirstChild("HumanoidRootPoint") or char:FindFirstChild("HumanoidRoot")
+    if not root then return nil end
+
+    local best, bestDist = nil, range
+    for _, target in ipairs(workspace:GetChildren()) do
+        if target ~= char and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
+            local tRoot = target:FindFirstChild("HumanoidRootPoint") or target:FindFirstChild("HumanoidRoot")
+            if tRoot then
+                local dist = (tRoot.Position - root.Position).Magnitude
+                if dist < bestDist then
+                    best, bestDist = target, dist
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function attackTarget(target)
+    local char = getCharacter()
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+    -- Simula ataque automático contra o alvo mais próximo
+    pcall(function()
+        -- Tenta usar a skill de combate padrão do jogo
+        local cmd = ReplicatedStorage:FindFirstChild("DefaultRemotes")
+        if cmd then
+            pcall(function() cmd:Fire("attack", target) end)
+        end
+    end)
+end
+
+local function teleportTo(location)
+    -- Teleport básico para ilhas usando CFrame do HumanoidRootPoint
+    local char = getCharacter()
+    local root = char:FindFirstChild("HumanoidRootPoint") or char:FindFirstChild("HumanoidRoot")
+    if not root then return end
+
+    local destinations = {
+        second = Vector3.new(-1428, 70, -35),
+    }
+    local pos = destinations[location]
+    if pos then
+        pcall(function() root.CFrame = CFrame.new(pos) end)
+    end
+end
+
+local function useStatButton()
+    -- Função placeholder: ajuste conforme a API do seu executor/jogo
+    print("[Hub] UseStatButton pressionado")
+end
+
+-- Loop de autofarm
+RunService.HeartBeat:Connect(function()
+    if not farmRunning then return end
+    local char = getCharacter()
+    local humanoid = char:FindFirstChild("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return end
+
+    local enemy = findNearestEnemy(devFarm and 500 or 120)
+    if enemy then
+        attackTarget(enemy)
+    end
+end)
+
+print("[Hub] Blox Fruits Hub carregado. Use o menu para ativar o Autofarm.")
